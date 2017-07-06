@@ -19,20 +19,11 @@ var handler = Handler.prototype;
  *
  */
 handler.send = function(msg, session, next) {
-	var rid = session.get('rid');
+	var rid = msg.rid;
 	console.log(session.uid)
 	var username = session.uid.split('*')[0];
 	var channelService = this.app.get('channelService');
-	var param = msg.content._id?msg.content:{
-        _id: Number(Date.now().toString()+Utils.GetRandomNum(0,1000).toString()),
-        text: msg.content,
-        createdAt: new Date(),
-        user: {
-            _id: Number(Date.now().toString()+Utils.GetRandomNum(0,1000).toString()),
-            name: username,
-            avatar: 'https://facebook.github.io/react/img/logo_og.png',
-        }
-	};
+	var param = msg.content;
 	channel = channelService.getChannel(rid, false);
 
 	//the target is all users
@@ -46,7 +37,10 @@ handler.send = function(msg, session, next) {
 		channelService.pushMessageByUids('onChat', param, [{
 			uid: tuid,
 			sid: tsid
-		}]);
+		}],function (err,users) {
+            console.log(err)
+               console.log(JSON.stringify(users))//发送失败的用户
+        });
 	}
 	next(null, {
 		route: msg.route
