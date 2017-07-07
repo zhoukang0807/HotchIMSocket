@@ -1,11 +1,11 @@
 var chatRemote = require('../remote/chatRemote');
 var Utils = require('../../../../util/utils');
-module.exports = function(app) {
-	return new Handler(app);
+module.exports = function (app) {
+    return new Handler(app);
 };
 
-var Handler = function(app) {
-	this.app = app;
+var Handler = function (app) {
+    this.app = app;
 };
 
 var handler = Handler.prototype;
@@ -18,31 +18,32 @@ var handler = Handler.prototype;
  * @param  {Function} next next stemp callback
  *
  */
-handler.send = function(msg, session, next) {
-	var rid = msg.rid;
-	console.log(session.uid)
-	var username = session.uid.split('*')[0];
-	var channelService = this.app.get('channelService');
-	var param = msg.content;
-	channel = channelService.getChannel(rid, false);
+handler.send = function (msg, session, next) {
+    var channelService = this.app.get('channelService');
+    var message = msg.content;
 
-	//the target is all users
-	if(msg.target == '*') {
-		channel.pushMessage('onChat', param);
-	}
-	//the target is specific user
-	else {
-		var tuid = msg.target + '*' + rid;
-		var tsid = channel.getMember(tuid)['sid'];
-		channelService.pushMessageByUids('onChat', param, [{
-			uid: tuid,
-			sid: tsid
-		}],function (err,users) {
-            console.log(err)
-               console.log(JSON.stringify(users))//发送失败的用户
-        });
-	}
-	next(null, {
-		route: msg.route
-	});
+    var users = msg.receivers;
+    var receives = [];
+    for (var i = 0; i < users.length; i++) {
+        try{
+            var param = {};
+            channel = channelService.getChannel(users[i].userId, false);
+            param.uid = users[i].userName + '*' + users[i].userId;
+            param.sid = channel.getMember(param.uid)['sid'];
+            receives.push(param);
+        }catch(err){
+            continue;
+        }
+    }
+    console.log(receives)
+    if(receives.length==0){
+        return;
+    }
+    channelService.pushMessageByUids('onChat', message, receives, function (err, users) {
+        console.log(err)
+        console.log(JSON.stringify(users))//发送失败的用户
+    });
+    next(null, {
+        route: msg.route
+    });
 };
