@@ -23,12 +23,13 @@ handler.send = function (msg, session, next) {
     var message = msg.content;
 
     var users = msg.receivers;
+    console.log(users)
     var receives = [];
     for (var i = 0; i < users.length; i++) {
         try{
             var param = {};
-            channel = channelService.getChannel(users[i].userId, false);
-            param.uid = users[i].userName + '*' + users[i].userId;
+            channel = channelService.getChannel("home", false);
+            param.uid = users[i].userName + '*' + "home";
             param.sid = channel.getMember(param.uid)['sid'];
             receives.push(param);
         }catch(err){
@@ -37,6 +38,9 @@ handler.send = function (msg, session, next) {
     }
     console.log(receives)
     if(receives.length==0){
+        next(null, {
+            route: msg.route
+        })
         return;
     }
     channelService.pushMessageByUids('onChat', message, receives, function (err, users) {
