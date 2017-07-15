@@ -1,5 +1,7 @@
 var chatRemote = require('../remote/chatRemote');
-var Utils = require('../../../../util/utils');
+var Utils = require('../../../util/utils');
+var redis = require('../../../redis/connect');
+
 module.exports = function (app) {
     return new Handler(app);
 };
@@ -23,21 +25,55 @@ handler.send = function (msg, session, next) {
     var message = msg.content;
 
     var users = msg.receivers;
+
     console.log(users)
     var receives = [];
     for (var i = 0; i < users.length; i++) {
-        try{
+        var m = i;//因为下面是异步的方法，var定义的i变化不是我们想要的变量的值，应该使用let,但let是es6的语法
+        //发送消息，记录
+        redis.hget(msg.from, users[i].userName, function (err, data) {
+            var messages = [];
+            if (data) {
+                messages = JSON.parse(data).concat(message);
+                redis.hset(msg.from, users[m].userName, JSON.stringify(messages), redis.print);
+            } else {
+                redis.hset(msg.from, users[m].userName, JSON.stringify(message), redis.print);
+            }
+        });
+        redis.hget( users[i].userName,msg.from, function (err, data) {
+            var messages = [];
+            if (data) {
+                messages = JSON.parse(data).concat(message);
+                redis.hset(users[m].userName,msg.from , JSON.stringify(messages), redis.print);
+            } else {
+                redis.hset( users[m].userName,msg.from, JSON.stringify(message), redis.print);
+            }
+        });
+        //chatList信息
+        redis.hget(users[i].userName+":recent",msg.from , function (err, data) {
+            var  user = users[m];
+            if(data){
+                user["unreadCount"]=JSON.parse(data).unreadCount+1;
+            }else{
+                user["unreadCount"]=1;
+            }
+            user["time"]=message[0].createdAt;
+            user["content"]=message[0].text;
+            redis.hset(user.userName+":recent",msg.from , JSON.stringify(user), redis.print);
+        });
+
+        try {
             var param = {};
             channel = channelService.getChannel("home", false);
             param.uid = users[i].userName + '*' + "home";
             param.sid = channel.getMember(param.uid)['sid'];
             receives.push(param);
-        }catch(err){
+        } catch (err) {
             continue;
         }
     }
     console.log(receives)
-    if(receives.length==0){
+    if (receives.length == 0) {
         next(null, {
             route: msg.route
         })
@@ -49,5 +85,142 @@ handler.send = function (msg, session, next) {
     });
     next(null, {
         route: msg.route
+    });
+};
+
+
+
+handler.getMessages = function (msg, session, next) {
+    var count = msg.count;
+    redis.hget(msg.from,msg.receiver, function (err, data) {
+        if (data) {
+            var messages = JSON.parse(data);
+            var loadMore=false;
+            var showMes=[];
+            for(var i=messages.length<(20+count)?0:(messages.length-(20+count));i<messages.length-count;i++)
+            {
+                showMes.push(messages[i]);
+            }
+            if(messages.length>(count+20)){
+                loadMore = true;
+            }
+            next(null, {
+                messages:showMes,
+                loadMore:loadMore
+            });
+        } else {
+            redis.hset(msg.from,msg.receiver, JSON.stringify([]), redis.print);
+            next(null, {
+                messages:[],
+                loadMore:false
+            });
+        }
+    });
+
+};
+
+handler.addFriend = function (msg, session, next) {
+    var requets = [];
+    redis.hget(msg.receiver,"newFriend", function (err, data) {
+        if (data) {
+            var news=JSON.parse(data);
+            var flag = false;
+            for(var i=0;i<news.length;i++){
+                if(news[i].userName == msg.from){
+                    flag = true;
+                    break;
+                }
+            }
+            if(flag){
+                next(null, {
+                    requets:[],
+                });
+                return;
+            }else{
+                requets = JSON.parse(data).concat([{userName:msg.from,avatar:msg.avatar}]);
+                redis.hset(msg.receiver,"newFriend", JSON.stringify(requets), redis.print);
+                next(null, {
+                    requets:requets,
+                });
+                pushNewFriendMessage(this,msg);
+                return;
+            }
+        }else {
+            requets = [{userName:msg.from,avatar:msg.avatar}];
+            redis.hset(msg.receiver,"newFriend", JSON.stringify([{userName:msg.from,avatar:msg.avatar}]), redis.print);
+            next(null, {
+                requets:requets,
+            });
+            pushNewFriendMessage(this,msg);
+        }
+    }.bind(this));
+
+};
+function pushNewFriendMessage(context,msg){
+    var channelService = context.app.get('channelService');
+    var param = {};
+    channel = channelService.getChannel("home", false);
+    param.uid = msg.receiver + '*' + "home";
+    param.sid = channel.getMember(param.uid)['sid'];
+    channelService.pushMessageByUids('onAddFriend', {hasTip:true,userName:msg.from}, [param], function (err, users) {
+        console.log(JSON.stringify(users))//发送失败的用户
+    });
+}
+handler.getNewFriend = function (msg, session, next) {
+    var requets = [];
+    redis.hget(msg.from,"newFriend", function (err, data) {
+        console.log(data)
+        if (data) {
+            var requets = JSON.parse(data);
+            next(null, {
+                requets: requets,
+            });
+        }else{
+            next(null, {
+                requets: [],
+            });
+        }
+    });
+};
+handler.cleanFriend = function (msg, session, next) {
+    var requets = [];
+    redis.hget(msg.from,"newFriend", function (err, data) {
+        console.log(data)
+        if (data) {
+            var news=JSON.parse(data);
+            for(var i=0;i<news.length;i++){
+                console.log(news[i].receiver, msg.receiver)
+                if(news[i].userName == msg.receiver){
+                    continue;
+                }
+                requets.push(news[i]);
+            }
+            redis.hset(msg.from,"newFriend", JSON.stringify(requets), redis.print);
+            next(null, {
+                requets: requets,
+                userName:msg.receiver
+            });
+        }else{
+            next(null, {
+                requets: [],
+                userName:msg.receiver
+            });
+        }
+    });
+};
+handler.addRoom = function (msg, session, next) {
+
+};
+
+
+handler.getChatList = function (msg, session, next) {
+    redis.hgetall(msg.from+":recent" , function (err, data) {
+        var chatList=[];
+        for (var key in data) {
+            chatList.push(JSON.parse(data[key]));
+        }
+        next(null, {
+            chatList: chatList
+        });
     });
 };
