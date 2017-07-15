@@ -1,7 +1,21 @@
 var chatRemote = require('../remote/chatRemote');
 var Utils = require('../../../util/utils');
 var redis = require('../../../redis/connect');
-
+Date.prototype.Format = function (fmt) { //author: meizz
+    var o = {
+        "M+": this.getMonth() + 1, //月份
+        "d+": this.getDate(), //日
+        "h+": this.getHours(), //小时
+        "m+": this.getMinutes(), //分
+        "s+": this.getSeconds(), //秒
+        "q+": Math.floor((this.getMonth() + 3) / 3), //季度
+        "S": this.getMilliseconds() //毫秒
+    };
+    if (/(y+)/.test(fmt)) fmt = fmt.replace(RegExp.$1, (this.getFullYear() + "").substr(4 - RegExp.$1.length));
+    for (var k in o)
+        if (new RegExp("(" + k + ")").test(fmt)) fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
+    return fmt;
+}
 module.exports = function (app) {
     return new Handler(app);
 };
@@ -51,15 +65,17 @@ handler.send = function (msg, session, next) {
         });
         //chatList信息
         redis.hget(users[i].userName+":recent",msg.from , function (err, data) {
-            var  user = users[m];
+            var  user = msg.fromInfo;
             if(data){
                 user["unreadCount"]=JSON.parse(data).unreadCount+1;
             }else{
                 user["unreadCount"]=1;
             }
-            user["time"]=message[0].createdAt;
+            user["time"]=new Date(message[0].createdAt).Format("yyyy-MM-dd hh:mm:ss");
             user["content"]=message[0].text;
-            redis.hset(user.userName+":recent",msg.from , JSON.stringify(user), redis.print);
+            redis.hset(user.userName+":recent",msg.from , JSON.stringify(user), function (err,res) {
+                pushChatListMessage(channelService,user.userName);
+            });
         });
 
         try {
@@ -116,6 +132,14 @@ handler.getMessages = function (msg, session, next) {
             });
         }
     });
+    var channelService = this.app.get('channelService');
+    redis.hget(msg.from+":recent",msg.receiver , function (err, data) {
+        var  user = JSON.parse(data);
+        user.unreadCount = 0;
+        redis.hset(user.userName+":recent",msg.from , JSON.stringify(user), function (err,res) {
+            pushChatListMessage(channelService,msg.from);
+        });
+    });
 
 };
 
@@ -165,6 +189,23 @@ function pushNewFriendMessage(context,msg){
     channelService.pushMessageByUids('onAddFriend', {hasTip:true,userName:msg.from}, [param], function (err, users) {
         console.log(JSON.stringify(users))//发送失败的用户
     });
+}
+
+function pushChatListMessage(channelService,name){
+    var param = {};
+    channel = channelService.getChannel("home", false);
+    param.uid = name + '*' + "home";
+    param.sid = channel.getMember(param.uid)['sid'];
+    redis.hgetall(name+":recent" , function (err, data) {
+        var chatList=[];
+        for (var key in data) {
+            chatList.push(JSON.parse(data[key]));
+        }
+        channelService.pushMessageByUids('onRefreshFriend', chatList, [param], function (err, users) {
+            console.log(JSON.stringify(users))//发送失败的用户
+        });
+    });
+
 }
 handler.getNewFriend = function (msg, session, next) {
     var requets = [];
