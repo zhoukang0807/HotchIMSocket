@@ -63,7 +63,7 @@ handler.send = function (msg, session, next) {
                 redis.hset( users[m].userName,msg.from, JSON.stringify(message), redis.print);
             }
         });
-        //chatList信息
+        //chatList信息.接收方
         redis.hget(users[i].userName+":recent",msg.from , function (err, data) {
             var  user = msg.fromInfo;
             if(data){
@@ -73,11 +73,24 @@ handler.send = function (msg, session, next) {
             }
             user["time"]=new Date(message[0].createdAt).Format("yyyy-MM-dd hh:mm:ss");
             user["content"]=message[0].text;
-            redis.hset(user.userName+":recent",msg.from , JSON.stringify(user), function (err,res) {
+            redis.hset(users[m].userName+":recent",msg.from , JSON.stringify(user), function (err,res) {
                 pushChatListMessage(channelService,user.userName);
             });
         });
-
+        //chatList信息.发送方
+        redis.hget(msg.from+":recent",users[m].userName , function (err, data) {
+            var  user =users[m];
+            if(data){
+                user["unreadCount"]=JSON.parse(data).unreadCount+1;
+            }else{
+                user["unreadCount"]=1;
+            }
+            user["time"]=new Date(message[0].createdAt).Format("yyyy-MM-dd hh:mm:ss");
+            user["content"]=message[0].text;
+            redis.hset(msg.from+":recent",users[m].userName , JSON.stringify(user), function (err,res) {
+                pushChatListMessage(channelService,user.userName);
+            });
+        });
         try {
             var param = {};
             channel = channelService.getChannel("home", false);
@@ -135,10 +148,15 @@ handler.getMessages = function (msg, session, next) {
     var channelService = this.app.get('channelService');
     redis.hget(msg.from+":recent",msg.receiver , function (err, data) {
         var  user = JSON.parse(data);
-        user.unreadCount = 0;
-        redis.hset(user.userName+":recent",msg.from , JSON.stringify(user), function (err,res) {
-            pushChatListMessage(channelService,msg.from);
-        });
+        if(data){
+            user.unreadCount = 0;
+            redis.hset(msg.from+":recent",msg.receiver , JSON.stringify(user), function (err,res) {
+                pushChatListMessage(channelService,msg.from);
+            });
+        }else{
+            return;
+        }
+
     });
 
 };
