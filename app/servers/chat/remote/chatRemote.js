@@ -67,6 +67,7 @@ ChatRemote.prototype.kick = function(uid, sid, name) {
 	if( !! channel) {
 		channel.leave(uid, sid);
 	}
+	console.log(sid);
 	var username = uid.split('*')[0];
 	var param = {
 		route: 'onLeave',
