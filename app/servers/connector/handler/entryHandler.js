@@ -22,22 +22,20 @@ handler.enter = function(msg, session, next) {
     var uid = msg.username + '*' + rid
     var sessionService = self.app.get('sessionService');
     var BackendSessionService = self.app.get('BackendSessionService');
-
-    // if( !! sessionService.getByUid(uid)) {
-    //     next(null, {
-    //         code: 500,
-    //         error: true
-    //     });
-    //     return;
-    // }
+    var flag =false;
+    if( !! sessionService.getByUid(uid)) {
+        flag =true;
+    }
 
     session.bind(uid);
-    session.set('rid', rid);
-    session.push('rid', function(err) {
-        if(err) {
-            console.error('set rid for session service failed! error is : %j', err.stack);
-        }
-    });
+    if(!flag){
+        session.set('rid', rid);
+        session.push('rid', function(err) {
+            if(err) {
+                console.error('set rid for session service failed! error is : %j', err.stack);
+            }
+        });
+    }
     //session.on('closed', onUserLeave.bind(null, self.app));
 
     //put user into channel
