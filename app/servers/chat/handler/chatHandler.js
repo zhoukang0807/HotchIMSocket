@@ -80,11 +80,7 @@ handler.send = function (msg, session, next) {
         //chatList信息.发送方
         redis.hget(msg.from+":recent",users[m].userName , function (err, data) {
             var  user =users[m];
-            if(data){
-                user["unreadCount"]=JSON.parse(data).unreadCount+1;
-            }else{
-                user["unreadCount"]=1;
-            }
+            user["unreadCount"]=0;
             user["time"]=new Date(message[0].createdAt).Format("yyyy-MM-dd hh:mm:ss");
             user["content"]=message[0].text;
             redis.hset(msg.from+":recent",users[m].userName , JSON.stringify(user), function (err,res) {
