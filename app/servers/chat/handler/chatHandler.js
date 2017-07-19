@@ -53,25 +53,24 @@ handler.send = function (msg, session, next) {
     for (var i = 0; i < users.length; i++) {
         try {
             if (msg.room) {
-                message[i]["roomName"] = msg.roomInfo.roomName;
                 var param = {};
                 channel = channelService.getChannel("home", false);
                 param.uid = users[i] + '*' + "home";
                 param.sid = channel.getMember(param.uid)['sid'];
                 receives.push(param);
+                message[0]["roomName"] = msg.roomInfo.roomName;
             }else{
                 var param = {};
                 channel = channelService.getChannel("home", false);
-                param.uid = users[i] + '*' + "home";
+                param.uid = users[i].userName + '*' + "home";
                 param.sid = channel.getMember(param.uid)['sid'];
                 receives.push(param);
             }
         } catch (err) {
+            console.log(err)
             continue;
         }
     }
-    console.log("ceshi"+JSON.stringify(receives))
-    console.log("ceshi"+JSON.stringify(message))
     console.log(receives)
     if (receives.length == 0) {
         next(null, {
@@ -97,7 +96,7 @@ function saveRoomMessage(count,users,msg,channelService) {
             messages = JSON.parse(data).concat(msg.content);
             redis.hset(users[m], msg.roomInfo.roomName, JSON.stringify(messages), redis.print);
         } else {
-            redis.hset(users[m], msg.roomInfo.roomName, JSON.stringify(message), redis.print);
+            redis.hset(users[m], msg.roomInfo.roomName, JSON.stringify(msg.content), redis.print);
         }
     });
 
