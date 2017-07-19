@@ -71,17 +71,6 @@ handler.send = function (msg, session, next) {
                     pushChatListMessage(channelService, users[m]);
                 });
             });
-
-
-            try {
-                var param = {};
-                channel = channelService.getChannel("home", false);
-                param.uid = users[i].userName + '*' + "home";
-                param.sid = channel.getMember(param.uid)['sid'];
-                receives.push(param);
-            } catch (err) {
-                continue;
-            }
         }
     } else {
         for (var i = 0; i < users.length; i++) {
@@ -129,19 +118,30 @@ handler.send = function (msg, session, next) {
                     pushChatListMessage(channelService, user.userName);
                 });
             });
-            try {
-                var param = {};
-                channel = channelService.getChannel("home", false);
-                param.uid = users[i].userName + '*' + "home";
-                param.sid = channel.getMember(param.uid)['sid'];
-                receives.push(param);
-            } catch (err) {
-                continue;
-            }
         }
     }
-
-
+    for (var i = 0; i < users.length; i++) {
+        try {
+            if (msg.room) {
+                message[i]["roomName"] = msg.roomInfo.roomName;
+                var param = {};
+                channel = channelService.getChannel("home", false);
+                param.uid = users[i] + '*' + "home";
+                param.sid = channel.getMember(param.uid)['sid'];
+                receives.push(param);
+            }else{
+                var param = {};
+                channel = channelService.getChannel("home", false);
+                param.uid = users[i] + '*' + "home";
+                param.sid = channel.getMember(param.uid)['sid'];
+                receives.push(param);
+            }
+        } catch (err) {
+            continue;
+        }
+    }
+    console.log("ceshi"+JSON.stringify(receives))
+    console.log("ceshi"+JSON.stringify(message))
     console.log(receives)
     if (receives.length == 0) {
         next(null, {
@@ -149,11 +149,7 @@ handler.send = function (msg, session, next) {
         })
         return;
     }
-    if(msg.room){
-        for(var i = 0;i < message.length;i++){
-            message[i]["roomName"]= msg.roomInfo.roomName;
-        }
-    }
+
     channelService.pushMessageByUids('onChat', message, receives, function (err, users) {
         console.log(err)
         console.log(JSON.stringify(users))//发送失败的用户
