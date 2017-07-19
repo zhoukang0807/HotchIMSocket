@@ -43,81 +43,11 @@ handler.send = function (msg, session, next) {
     var receives = [];
     if (msg.room) {
         for (var i = 0; i < users.length; i++) {
-            var m = i;//因为下面是异步的方法，var定义的i变化不是我们想要的变量的值，应该使用let,但let是es6的语法
-            redis.hget(users[m], msg.roomInfo.roomName, function (err, data) {
-                var messages = [];
-                if (data) {
-                    messages = JSON.parse(data).concat(message);
-                    redis.hset(users[m], msg.roomInfo.roomName, JSON.stringify(messages), redis.print);
-                } else {
-                    redis.hset(users[m], msg.roomInfo.roomName, JSON.stringify(message), redis.print);
-                }
-            });
-
-            //chatList信息.接收方
-            redis.hget(users[m] + ":recent", msg.roomInfo.roomName, function (err, data) {
-                var user = msg.roomInfo;
-                if (data) {
-                    user["unreadCount"] = JSON.parse(data).unreadCount + 1;
-                } else {
-                    user["unreadCount"] = 1;
-                }
-                if (users[m] == msg.from) {
-                    user["unreadCount"] = 0;
-                }
-                user["time"] = new Date(message[0].createdAt).Format("yyyy-MM-dd hh:mm:ss");
-                user["content"] = message[0].text;
-                redis.hset(users[m] + ":recent", msg.roomInfo.roomName, JSON.stringify(user), function (err, res) {
-                    pushChatListMessage(channelService, users[m]);
-                });
-            });
+            saveRoomMessage(i,users,msg,channelService);
         }
     } else {
         for (var i = 0; i < users.length; i++) {
-            var m = i;//因为下面是异步的方法，var定义的i变化不是我们想要的变量的值，应该使用let,但let是es6的语法
-            //发送消息，记录
-            redis.hget(msg.from, users[i].userName, function (err, data) {
-                var messages = [];
-                if (data) {
-                    messages = JSON.parse(data).concat(message);
-                    redis.hset(msg.from, users[m].userName, JSON.stringify(messages), redis.print);
-                } else {
-                    redis.hset(msg.from, users[m].userName, JSON.stringify(message), redis.print);
-                }
-            });
-            redis.hget(users[i].userName, msg.from, function (err, data) {
-                var messages = [];
-                if (data) {
-                    messages = JSON.parse(data).concat(message);
-                    redis.hset(users[m].userName, msg.from, JSON.stringify(messages), redis.print);
-                } else {
-                    redis.hset(users[m].userName, msg.from, JSON.stringify(message), redis.print);
-                }
-            });
-            //chatList信息.接收方
-            redis.hget(users[i].userName + ":recent", msg.from, function (err, data) {
-                var user = msg.fromInfo;
-                if (data) {
-                    user["unreadCount"] = JSON.parse(data).unreadCount + 1;
-                } else {
-                    user["unreadCount"] = 1;
-                }
-                user["time"] = new Date(message[0].createdAt).Format("yyyy-MM-dd hh:mm:ss");
-                user["content"] = message[0].text;
-                redis.hset(users[m].userName + ":recent", msg.from, JSON.stringify(user), function (err, res) {
-                    pushChatListMessage(channelService, user.userName);
-                });
-            });
-            //chatList信息.发送方
-            redis.hget(msg.from + ":recent", users[m].userName, function (err, data) {
-                var user = users[m];
-                user["unreadCount"] = 0;
-                user["time"] = new Date(message[0].createdAt).Format("yyyy-MM-dd hh:mm:ss");
-                user["content"] = message[0].text;
-                redis.hset(msg.from + ":recent", users[m].userName, JSON.stringify(user), function (err, res) {
-                    pushChatListMessage(channelService, user.userName);
-                });
-            });
+            saveUserMessage(i,users,msg,channelService);
         }
     }
     for (var i = 0; i < users.length; i++) {
@@ -159,6 +89,83 @@ handler.send = function (msg, session, next) {
     });
 };
 
+function saveRoomMessage(count,users,msg,channelService) {
+    var m = count;//因为下面是异步的方法，var定义的i变化不是我们想要的变量的值，应该使用let,但let是es6的语法
+    redis.hget(users[m], msg.roomInfo.roomName, function (err, data) {
+        var messages = [];
+        if (data) {
+            messages = JSON.parse(data).concat(msg.content);
+            redis.hset(users[m], msg.roomInfo.roomName, JSON.stringify(messages), redis.print);
+        } else {
+            redis.hset(users[m], msg.roomInfo.roomName, JSON.stringify(message), redis.print);
+        }
+    });
+
+    //chatList信息.接收方
+    redis.hget(users[m] + ":recent", msg.roomInfo.roomName, function (err, data) {
+        var user = msg.roomInfo;
+        if (data) {
+            user["unreadCount"] = JSON.parse(data).unreadCount + 1;
+        } else {
+            user["unreadCount"] = 1;
+        }
+        if (users[m] == msg.from) {
+            user["unreadCount"] = 0;
+        }
+        user["time"] = new Date(msg.content[0].createdAt).Format("yyyy-MM-dd hh:mm:ss");
+        user["content"] = msg.content[0].text;
+        redis.hset(users[m] + ":recent", msg.roomInfo.roomName, JSON.stringify(user), function (err, res) {
+            pushChatListMessage(channelService, users[m]);
+        });
+    });
+}
+
+function saveUserMessage(count,users,msg,channelService) {
+    var m =count;//因为下面是异步的方法，var定义的i变化不是我们想要的变量的值，应该使用let,但let是es6的语法
+    //发送消息，记录
+    redis.hget(msg.from, users[m].userName, function (err, data) {
+        var messages = [];
+        if (data) {
+            messages = JSON.parse(data).concat(msg.content);
+            redis.hset(msg.from, users[m].userName, JSON.stringify(messages), redis.print);
+        } else {
+            redis.hset(msg.from, users[m].userName, JSON.stringify(msg.content), redis.print);
+        }
+    });
+    redis.hget(users[m].userName, msg.from, function (err, data) {
+        var messages = [];
+        if (data) {
+            messages = JSON.parse(data).concat(msg.content);
+            redis.hset(users[m].userName, msg.from, JSON.stringify(messages), redis.print);
+        } else {
+            redis.hset(users[m].userName, msg.from, JSON.stringify(msg.content), redis.print);
+        }
+    });
+    //chatList信息.接收方
+    redis.hget(users[m].userName + ":recent", msg.from, function (err, data) {
+        var user = msg.fromInfo;
+        if (data) {
+            user["unreadCount"] = JSON.parse(data).unreadCount + 1;
+        } else {
+            user["unreadCount"] = 1;
+        }
+        user["time"] = new Date(msg.content[0].createdAt).Format("yyyy-MM-dd hh:mm:ss");
+        user["content"] = msg.content[0].text;
+        redis.hset(users[m].userName + ":recent", msg.from, JSON.stringify(user), function (err, res) {
+            pushChatListMessage(channelService, user.userName);
+        });
+    });
+    //chatList信息.发送方
+    redis.hget(msg.from + ":recent", users[m].userName, function (err, data) {
+        var user = users[m];
+        user["unreadCount"] = 0;
+        user["time"] = new Date(msg.content[0].createdAt).Format("yyyy-MM-dd hh:mm:ss");
+        user["content"] = msg.content[0].text;
+        redis.hset(msg.from + ":recent", users[m].userName, JSON.stringify(user), function (err, res) {
+            pushChatListMessage(channelService, user.userName);
+        });
+    });
+}
 
 handler.getMessages = function (msg, session, next) {
     var count = msg.count;
